@@ -2,7 +2,6 @@ import os
 import warnings
 
 from modules import shared
-
 import accelerate  # This early import makes Intel GPUs happy
 
 import modules.one_click_installer_check
@@ -70,6 +69,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 def create_interface():
+    logger.debug("Creating interface...")  # Debug statement
 
     title = 'Text generation web UI'
 
@@ -159,21 +159,23 @@ def create_interface():
     # Launch the interface
     shared.gradio['interface'].queue(concurrency_count=64)
     with OpenMonkeyPatch():
-        shared.gradio['interface'].launch(
-            prevent_thread_lock=True,
-            share=shared.args.share,
-            server_name=None if not shared.args.listen else (shared.args.listen_host or '0.0.0.0'),
-            server_port=shared.args.listen_port,
-            inbrowser=shared.args.auto_launch,
-            auth=auth or None,
-            ssl_verify=False if (shared.args.ssl_keyfile or shared.args.ssl_certfile) else True,
-            ssl_keyfile=shared.args.ssl_keyfile,
-            ssl_certfile=shared.args.ssl_certfile
-        )
+        try:
+            shared.gradio['interface'].launch(
+                prevent_thread_lock=True,
+                share=shared.args.share,
+                server_name=None if not shared.args.listen else (shared.args.listen_host or '0.0.0.0'),
+                server_port=shared.args.listen_port,
+                inbrowser=shared.args.auto_launch,
+                auth=auth or None,
+                ssl_verify=False if (shared.args.ssl_keyfile or shared.args.ssl_certfile) else True,
+                ssl_keyfile=shared.args.ssl_keyfile,
+                ssl_certfile=shared.args.ssl_certfile
+            )
+        except Exception as e:
+            logger.error(f"Error launching interface: {e}")  # Log exception
 
 
 if __name__ == "__main__":
-
     logger.info("Starting Text generation web UI")
     do_cmd_flags_warnings()
 
@@ -250,13 +252,16 @@ if __name__ == "__main__":
         if shared.args.extensions is not None and len(shared.args.extensions) > 0:
             extensions_module.load_extensions()
     else:
-        # Launch the web UI
-        create_interface()
-        while True:
-            time.sleep(0.5)
-            if shared.need_restart:
-                shared.need_restart = False
+        try:
+            # Launch the web UI
+            create_interface()
+            while True:
                 time.sleep(0.5)
-                shared.gradio['interface'].close()
-                time.sleep(0.5)
-                create_interface()
+                if shared.need_restart:
+                    shared.need_restart = False
+                    time.sleep(0.5)
+                    shared.gradio['interface'].close()
+                    time.sleep(0.5)
+                    create_interface()
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")  # Log any unexpected errors
